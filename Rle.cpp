@@ -2,7 +2,7 @@
 #include "Rle.h"  // Incluir el archivo de encabezado  
 
 std::string rleCompress(const std::string &input) {  
-    std::ostringstream compressed;  // Asegúrate de utilizar std::  
+    std::ostringstream compressed;    
     for (size_t i = 0; i < input.length(); ++i) {  
         char currentChar = input[i];  
         int count = 1;  
