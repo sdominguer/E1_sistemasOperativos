@@ -84,13 +84,35 @@ void compressFile(const string& inputFile, const string& outputFile) {
     cout << "Archivo comprimido guardado como: " << outputFile << endl;
 }
 
+void showHelp() {
+    cout << "Uso: ./programa <opcion> <archivo>\n";
+    cout << "Opciones:\n";
+    cout << "  -h, --help         Mostrar este mensaje de ayuda\n";
+    cout << "  -v, --version      Mostrar la versión del programa\n";
+    cout << "  -c, --compress     Comprimir el archivo\n";
+    cout << "  -x, --decompress   Descomprimir el archivo\n";
+}
+
+void showVersion() {
+    cout << "Compresor Huffman - Versión 1.0\n";
+}
+
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        cout << "Uso: " << argv[0] << " --compress <archivo>\n";
+    if (argc < 2) {
+        cout << "Uso incorrecto. Usa -h para ver las opciones.\n";
         return 1;
     }
-    string option = argv[1], filename = argv[2];
-    if (option == "--compress") compressFile(filename, filename + ".huff");
-    else cout << "Opción no reconocida.\n";
+    string option = argv[1];
+    if (option == "-h" || option == "--help") {
+        showHelp();
+    } else if (option == "-v" || option == "--version") {
+        showVersion();
+    } else if ((option == "-c" || option == "--compress") && argc == 3) {
+        string filename = argv[2];
+        compressFile(filename, filename + ".huff");
+    } else {
+        cout << "Opción no reconocida. Usa -h para ayuda.\n";
+        return 1;
+    }
     return 0;
 }
