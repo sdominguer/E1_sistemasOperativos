@@ -84,6 +84,47 @@ void compressFile(const string& inputFile, const string& outputFile) {
     cout << "Archivo comprimido guardado como: " << outputFile << endl;
 }
 
+void decompressFile(const string& inputFile, const string& outputFile) {
+    int fd = open(inputFile.c_str(), O_RDONLY);
+    if (fd == -1) { perror("Error opening compressed file"); return; }
+
+    vector<uint8_t> byteData;
+    char buffer[1024];
+    ssize_t bytesRead;
+    while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = 0; i < bytesRead; i++) byteData.push_back(buffer[i]);
+    }
+    close(fd);
+
+    string bitString = "";
+    for (uint8_t byte : byteData) {
+        bitString += bitset<8>(byte).to_string();
+    }
+
+    int outFd = open(outputFile.c_str(), O_WRONLY | O_CREAT, 0644);
+    if (outFd == -1) { perror("Error creating decompressed file"); return; }
+
+    priority_queue<Node*, vector<Node*>, Compare> pq;
+    Node* root = new Node('\0', 0);
+    Node* current = root;
+    for (char bit : bitString) {
+        if (bit == '0') {
+            if (!current->left) current->left = new Node('\0', 0);
+            current = current->left;
+        } else {
+            if (!current->right) current->right = new Node('\0', 0);
+            current = current->right;
+        }
+        if (!current->left && !current->right) {
+            write(outFd, &current->ch, 1);
+            current = root;
+        }
+    }
+    close(outFd);
+
+    cout << "Archivo descomprimido guardado como: " << outputFile << endl;
+}
+
 void showHelp() {
     cout << "Uso: ./programa <opcion> <archivo>\n";
     cout << "Opciones:\n";
@@ -110,6 +151,9 @@ int main(int argc, char* argv[]) {
     } else if ((option == "-c" || option == "--compress") && argc == 3) {
         string filename = argv[2];
         compressFile(filename, filename + ".huff");
+    } else if ((option == "-x" || option == "--decompress") && argc == 3) {
+        string filename = argv[2];
+        decompressFile(filename, filename + ".orig");
     } else {
         cout << "Opción no reconocida. Usa -h para ayuda.\n";
         return 1;
