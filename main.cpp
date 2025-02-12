@@ -1,49 +1,104 @@
-#include <iostream>  
-#include <fstream>  
-#include <bitset>  
-#include <string>  
-#include <sstream>  
-#include "Rle.h" // Incluir el archivo de encabezado  
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <unordered_map>
+#include <queue>
+#include <bitset>
+#include <fcntl.h>
+#include <unistd.h>
 
-using namespace std;  
+using namespace std;
 
-// Constantes globales  
-const string FILENAME = "archivo.bin"; // Archivo a leer  
-const bool IS_BINARY = true; // Indica si es binario  
+// Estructura para los nodos del árbol de Huffman
+struct HuffmanNode {
+    char data;
+    int freq;
+    HuffmanNode *left, *right;
+    HuffmanNode(char d, int f) : data(d), freq(f), left(nullptr), right(nullptr) {}
+};
 
-// Función que convierte un byte en su representación binaria de 8 bits  
-string byteToBits(unsigned char byte) {  
-    return bitset<8>(byte).to_string();  
-}  
+// Comparador para la cola de prioridad
+struct Compare {
+    bool operator()(HuffmanNode* l, HuffmanNode* r) {
+        return l->freq > r->freq;
+    }
+};
 
-// Lee un archivo (bin o txt) y devuelve su contenido como una cadena de bits  
-string readFileAsBits(const string &filename, bool isBinary) {  
-    ifstream file(filename, isBinary ? ios::binary : ios::in);  
-    if (!file) {  
-        cerr << "Error al abrir el archivo: " << filename << endl;  
-        return "";  
-    }  
+// Función para construir el árbol de Huffman
+typedef unordered_map<char, string> HuffmanCodeMap;
+HuffmanNode* buildHuffmanTree(unordered_map<char, int>& freqMap) {
+    priority_queue<HuffmanNode*, vector<HuffmanNode*>, Compare> minHeap;
     
-    // Lee el archivo byte por byte  
-    string bitStream;  
-    char byte;  
-    while (file.get(byte)) {  
-        bitStream += byteToBits(static_cast<unsigned char>(byte));  
-    }  
+    for (auto& pair : freqMap) {
+        minHeap.push(new HuffmanNode(pair.first, pair.second));
+    }
+    
+    while (minHeap.size() > 1) {
+        HuffmanNode *left = minHeap.top(); minHeap.pop();
+        HuffmanNode *right = minHeap.top(); minHeap.pop();
+        
+        HuffmanNode *merged = new HuffmanNode('\0', left->freq + right->freq);
+        merged->left = left;
+        merged->right = right;
+        
+        minHeap.push(merged);
+    }
+    return minHeap.top();
+}
 
-    file.close();  
-    return bitStream;  
-}  
+// Función para generar códigos de Huffman
+void generateHuffmanCodes(HuffmanNode* root, string code, HuffmanCodeMap &huffmanCode) {
+    if (!root) return;
+    
+    if (root->data != '\0') {
+        huffmanCode[root->data] = code;
+    }
+    
+    generateHuffmanCodes(root->left, code + "0", huffmanCode);
+    generateHuffmanCodes(root->right, code + "1", huffmanCode);
+}
 
-int main() {  
-    string bitStream = readFileAsBits(FILENAME, IS_BINARY);  
-    if (bitStream.empty()) return 1; // Salir si el contenido está vacío  
+// Función para leer un archivo y calcular frecuencias
+unordered_map<char, int> computeFrequencies(const string& filename) {
+    unordered_map<char, int> freqMap;
+    int fd = open(filename.c_str(), O_RDONLY);
+    if (fd < 0) {
+        perror("Error abriendo archivo");
+        exit(1);
+    }
+    
+    char buffer[1024];
+    ssize_t bytesRead;
+    while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0) {
+        for (ssize_t i = 0; i < bytesRead; i++) {
+            freqMap[buffer[i]]++;
+        }
+    }
+    
+    close(fd);
+    return freqMap;
+}
 
-    cout << "\nCadena de bits:\n" << bitStream << endl;  
-
-    // Aplicar la compresión RLE  
-    string compressed = rleCompress(bitStream);  
-    cout << "\nContenido comprimido:\n" << compressed << endl;  
-
-    return 0;  
+int main(int argc, char* argv[]) {
+    if (argc < 3) {
+        cerr << "Uso: " << argv[0] << " --compress <archivo>" << endl;
+        return 1;
+    }
+    
+    string option = argv[1];
+    string filename = argv[2];
+    
+    if (option == "--compress") {
+        unordered_map<char, int> freqMap = computeFrequencies(filename);
+        HuffmanNode* root = buildHuffmanTree(freqMap);
+        HuffmanCodeMap huffmanCode;
+        generateHuffmanCodes(root, "", huffmanCode);
+        
+        cout << "Códigos de Huffman generados:" << endl;
+        for (auto& pair : huffmanCode) {
+            cout << pair.first << " : " << pair.second << endl;
+        }
+    }
+    
+    return 0;
 }
