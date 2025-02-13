@@ -16,9 +16,11 @@ struct Node {
     Node(char c, int f) : ch(c), freq(f), left(nullptr), right(nullptr) {}
 };
 
+// por el lado izquierdo
 struct Compare {
-    bool operator()(Node* a, Node* b) { return a->freq > b->freq; }
+    bool operator()(Node* a, Node* b) { return a->freq < b->freq; } // Ahora prioriza los mayores
 };
+
 
 void buildHuffmanCodes(Node* root, string code, unordered_map<char, string>& huffmanCodes) {
     if (!root) return;
