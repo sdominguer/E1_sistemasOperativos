@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdint>
+#include <algorithm>
 
 using namespace std;
 
@@ -39,11 +40,16 @@ struct Compare {
 // izquierda y '1' al ir por la derecha.
 // ------------------------------------------------------------------
 void buildHuffmanCodes(Node* root, string code, unordered_map<char, string>& huffmanCodes) {
-    if (!root) return; // Caso base: si el nodo es nulo, se regresa
+    if (!root) return; // Caso base: nodo nulo
 
-    // Si el nodo es una hoja, se asigna el código binario acumulado para ese carácter
+    // Si el nodo es una hoja
     if (!root->left && !root->right) {
+        // Si el código es vacío (caso de archivo con un único carácter),
+        // se asigna "0" por defecto.
+        if (code == "") 
+            code = "0";
         huffmanCodes[root->ch] = code;
+        return;
     }
     
     // Recorrido recursivo por el subárbol izquierdo agregando '0'
@@ -76,10 +82,26 @@ void compressFile(const string& inputFile, const string& outputFile) {
     }
     close(fd); // Cerrar el archivo de entrada
 
-    // Crear la cola de prioridad (min-heap) para construir el árbol de Huffman
+    // Crear un vector a partir de la tabla de frecuencias
+    vector<pair<char, int> > frequencies(freq.begin(), freq.end());  // Nota el espacio entre > >
+    
+    // Función de comparación tradicional en lugar de lambda
+    struct FrequencyCompare {
+        bool operator()(const pair<char, int>& a, const pair<char, int>& b) {
+            if (a.second == b.second)
+                return a.first < b.first;
+            return a.second < b.second;
+        }
+    };
+    
+    sort(frequencies.begin(), frequencies.end(), FrequencyCompare());
+
+    // Crear la cola de prioridad
     priority_queue<Node*, vector<Node*>, Compare> pq;
-    for (auto& pair : freq) {
-        pq.push(new Node(pair.first, pair.second));
+    // Usar iterador tradicional en lugar de range-based for
+    for (vector<pair<char, int> >::iterator it = frequencies.begin(); 
+         it != frequencies.end(); ++it) {
+        pq.push(new Node(it->first, it->second));
     }
     // Combinar nodos hasta formar el árbol completo
     while (pq.size() > 1) {
@@ -118,9 +140,11 @@ void compressFile(const string& inputFile, const string& outputFile) {
     uint32_t uniqueCount = freq.size();
     write(outFd, &uniqueCount, sizeof(uniqueCount));
     // Luego, para cada carácter único se escribe el carácter y su frecuencia
-    for (auto& pair : freq) {
-        write(outFd, &pair.first, sizeof(char));
-        uint32_t frequency = pair.second;
+    // Usamos el vector ordenado para garantizar un orden fijo
+    for (vector<pair<char, int> >::iterator it = frequencies.begin(); 
+         it != frequencies.end(); ++it) {
+        write(outFd, &it->first, sizeof(char));
+        uint32_t frequency = it->second;
         write(outFd, &frequency, sizeof(frequency));
     }
 
@@ -133,12 +157,12 @@ void compressFile(const string& inputFile, const string& outputFile) {
     }
     close(fd); // Cerrar el archivo de entrada
 
-    // Convertir la cadena de bits a bytes para escribirlos en el archivo comprimido
+    // Convertir la cadena de bits a bytes
     string byteString = "";
     vector<uint8_t> byteData;
-    for (char bit : encodedText) {
-        byteString += bit;
-        // Cada vez que se acumulan 8 bits se convierte a un byte
+    // Usar iterador tradicional
+    for (string::iterator it = encodedText.begin(); it != encodedText.end(); ++it) {
+        byteString += *it;
         if (byteString.size() == 8) {
             byteData.push_back(bitset<8>(byteString).to_ulong());
             byteString = "";
@@ -180,8 +204,10 @@ void decompressFile(const string& inputFile, const string& outputFile) {
         return;
     }
 
-    // Leer la tabla de frecuencias del encabezado
-    unordered_map<char, uint32_t> freq;
+    // Vector de frecuencias
+    vector<pair<char, uint32_t> > frequencies;  // Nota el espacio entre > >
+    
+    // Leer la tabla de frecuencias
     for (uint32_t i = 0; i < uniqueCount; i++) {
         char c;
         uint32_t f;
@@ -195,13 +221,28 @@ void decompressFile(const string& inputFile, const string& outputFile) {
             close(fd);
             return;
         }
-        freq[c] = f;
+        pair<char, uint32_t> p;
+        p.first = c;
+        p.second = f;
+        frequencies.push_back(p);
     }
+    
+    // Función de comparación tradicional
+    struct FrequencyCompare {
+        bool operator()(const pair<char, uint32_t>& a, const pair<char, uint32_t>& b) {
+            if (a.second == b.second)
+                return a.first < b.first;
+            return a.second < b.second;
+        }
+    };
+    
+    sort(frequencies.begin(), frequencies.end(), FrequencyCompare());
 
-    // Reconstruir el árbol de Huffman a partir de la tabla de frecuencias leída
+    // Reconstruir el árbol de Huffman a partir del vector de frecuencias ordenado
     priority_queue<Node*, vector<Node*>, Compare> pq;
-    for (auto& p : freq) {
-        pq.push(new Node(p.first, p.second));
+    for (vector<pair<char, uint32_t> >::iterator it = frequencies.begin(); 
+         it != frequencies.end(); ++it) {
+        pq.push(new Node(it->first, it->second));
     }
     if (pq.empty()) {
         close(fd);
@@ -230,16 +271,18 @@ void decompressFile(const string& inputFile, const string& outputFile) {
     }
     close(fd); // Cerrar el archivo comprimido
 
-    // Convertir cada byte leído en una cadena de 8 bits
+    // Convertir bytes a bits
     string bitString = "";
-    for (uint8_t byte : byteData) {
-        bitString += bitset<8>(byte).to_string();
+    for (vector<uint8_t>::iterator it = byteData.begin(); 
+         it != byteData.end(); ++it) {
+        bitString += bitset<8>(*it).to_string();
     }
 
-    // Calcular el número total de caracteres originales usando la tabla de frecuencias
+    // Calcular total de caracteres
     int totalChars = 0;
-    for (auto &p : freq) {
-        totalChars += p.second;
+    for (vector<pair<char, uint32_t> >::iterator it = frequencies.begin(); 
+         it != frequencies.end(); ++it) {
+        totalChars += it->second;
     }
 
     // Abrir el archivo de salida en donde se escribirá el contenido descomprimido
@@ -249,20 +292,16 @@ void decompressFile(const string& inputFile, const string& outputFile) {
         return;
     }
 
-    // Decodificar la cadena de bits recorriéndola y utilizando el árbol de Huffman
+    // Decodificar usando iterador tradicional
     Node* current = root;
     int decodedCount = 0;
-    for (char bit : bitString) {
-        // Desplazarse a la izquierda si el bit es '0', a la derecha si es '1'
-        current = (bit == '0' ? current->left : current->right);
-        // Si se llega a una hoja, se ha decodificado un carácter y se escribe en el archivo
+    for (string::iterator it = bitString.begin(); it != bitString.end(); ++it) {
+        current = (*it == '0' ? current->left : current->right);
         if (!current->left && !current->right) {
             write(outFd, &current->ch, 1);
             decodedCount++;
-            // Si ya se han decodificado todos los caracteres originales, se finaliza el proceso
             if (decodedCount == totalChars) 
                 break;
-            // Reiniciar la búsqueda en la raíz para decodificar el siguiente carácter
             current = root;
         }
     }
